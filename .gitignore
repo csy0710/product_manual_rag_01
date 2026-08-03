@@ -1,0 +1,20 @@
+# 屏蔽大文件文件夹
+doc/
+output/
+logs/
+
+# IDE PyCharm配置
+.idea/
+
+# 环境密钥文件
+.env
+
+# Python缓存
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# 向量库、模型、数据集后续新增也可以继续在这里添加
+# models/
+# dataset/

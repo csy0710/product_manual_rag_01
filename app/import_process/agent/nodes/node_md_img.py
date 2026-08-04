@@ -3,6 +3,8 @@ import sys
 from pathlib import Path
 from typing import Tuple, List
 
+from aiohttp.web_fileresponse import content_type
+
 from app.core.logger import logger
 from app.import_process.agent.state import ImportGraphState
 from app.utils.task_utils import add_running_task, add_done_task
@@ -91,12 +93,13 @@ def step_1_get_content(state: ImportGraphState) -> Tuple[str, Path, Path]:
         #没有再读取，有证明是pdf节点解析过来的。
         with open(md_file_path, "r", encoding="utf-8") as f:
             md_content = f.read()
+            logger.info(f"【step_1_get_content】节点执行完成，读取文件内容，文件路径：{md_file_path}")
         state["md_content"] = md_content
 
 
     # 图片路径是否为空
     # 自己传入的md文件中的图片文件夹也要叫images，这里没有特殊处理
-    images_dir_obj =md_path_obj / "images"
+    images_dir_obj =md_path_obj.parent / "images"
 
     return md_content,md_path_obj,images_dir_obj
 
@@ -104,21 +107,24 @@ def step_1_get_content(state: ImportGraphState) -> Tuple[str, Path, Path]:
 def find_image_in_md_content(md_content, image_file,context_length:int=100):
     """在md中查找图片上下文"""
     # 定义正则表达式
-    pattern = re.compile(r"!\[.*?\(.*?"+image_file+".*?\)")
-
-    results = [] #存储图片多次使用，上下文不同！本次暴力处理，获取第一个
+    # pattern = re.compile(r"!\[.*?\(.*?"+image_file+".*?\)")
+    pattern = re.compile(r"!\[.*?\]\(.*?" + re.escape(image_file) + r"\)")
+    content = None #存储图片多次使用，上下文不同！minerU解析的图片即使两个图片一样但是图片名称不同，也会被识别为不同的图片！
     # 查询符合位置
-    for item in pattern.finditer(md_content):
+    items = list(pattern.finditer(md_content))
+    if not items:
+        return None
+    if item := items[0]:
         start,end = item.span()#获取的是匹配的图片链接的起始位置和结束位置
         #截取上文
         pre_text = md_content[max(start-context_length,0):start]
         #截取下文
         post_text = md_content[end:min(end+context_length,len(md_content))]
-        results.append((pre_text,post_text))
+        content=((pre_text,post_text))
     # 截取位置前后内容
-    if results:
-        logger.info(f"【find_image_in_md_content】节点执行完成，图片 {image_file} 在md中使用，截取第一个上下文为：{results[0]}")
-        return results[0]
+    if content:
+        logger.info(f"【find_image_in_md_content】节点执行完成，图片 {image_file} 在md中使用，截取第一个上下文为：{content}")
+        return content
 
 
 def step_2_scan_images(md_content:str,images_dir_obj:Path) -> List[Tuple[str,str,]]:
@@ -138,10 +144,101 @@ def step_2_scan_images(md_content:str,images_dir_obj:Path) -> List[Tuple[str,str
 
 
         targets.append((image_file,(images_dir_obj/image_file),content_data))
-
+    logger.info(f"【step_2_scan_images】节点执行完成，共识别到 {len(targets)} 张图片")
 
     return targets
 
+
+def step_3_generate_img_summaries(targets, stem):
+    """生成图片描述
+    参数：[（图片名，图片地址，（上文，下文））]，md的文件名称
+    返回值：[（图片名，图片描述）]
+    """
+    # 循环每一张图片，向视觉模型进行请求，获取图片描述
+    summaries = {}
+    requests_times=deque()
+    for image_file,image_path,context in targets:
+
+        # 访问限速（模型的限速标准1分钟10次）滑动窗口
+        apply_api_rate_limit(requests_times,max_requests=9)
+
+
+        vm_model = get_llm_client(model=lm_config.lv_model)
+        prompt = load_prompt("image_summary",root_folder=stem,image_content=context)
+        with open(image_path,"rb") as f:
+            image_base64 = base64.b64encode(f.read()).decode("utf-8")
+        messages = [
+            HumanMessage(
+                content=[
+                    {
+                        "type": "image_url",
+                        "image_url": {
+                            "url": f"data:image/jpeg;base64,{image_base64}"
+                        },
+                    },
+                    {"type": "text", "text": prompt},
+                ]
+            )
+        ]
+        response = vm_model.invoke(messages)
+        summary= response.content.strip().replace("\n","")
+        summaries[image_file] = summary
+    logger.info(f"【step_3_generate_img_summaries】节点执行完成,共生成 {len(summaries)} 张图片的描述,图片描述为：{summaries}")
+    return summaries
+
+
+def step_4_upload_images_and_replace_md(summaries, targets, md_content, stem):
+    """上传图片到minIO，更新md的内容"""
+    # 获取minio客户端对象
+    minio_client = get_minio_client()
+    images_url={}
+    # 删除旧的图片
+    object_list = minio_client.list_objects(minio_config.bucket_name, prefix=f"{minio_config.minio_img_dir[1:]}/{stem}",recursive=True)
+    delete_object_list = [DeleteObject(name=obj.object_name) for obj in object_list]
+
+    errors = minio_client.remove_objects(minio_config.bucket_name,delete_object_list)
+    for error in errors:
+        logger.info(f"删除对象失败,错误信息为：{error}")
+    logger.info(f"已经完成了{stem}中的删除,共删除 {len(delete_object_list)} 张图片")
+
+    # 上传新的图片到minIO.targets中的数据格式为（图片名.jpg，图片地址，（上文，下文））
+    for image_file,image_path,_ in targets:
+        try:
+            minio_client.fput_object(
+                bucket_name = minio_config.bucket_name,
+                object_name = f"{minio_config.minio_img_dir[1:]}/{stem}/{image_file}",
+                file_path=image_path,
+                content_type ="image/jpeg"
+            )
+            # 得到传完后的字典，key为图片名，value为minio图片地址
+            images_url[image_file] = f"http://{minio_config.endpoint}/{minio_config.bucket_name}{minio_config.minio_img_dir}/{stem}/{image_file}"
+            logger.info(f"【step_4_upload_images_and_replace_md】节点执行完成，图片 {image_file} 上传到minIO成功,图片地址为：{images_url[image_file]}")
+        except Exception as e:
+            logger.error(f"【step_4_upload_images_and_replace_md】节点执行完成，图片 {image_file} 上传到minIO失败,错误信息为：{e}")
+    image_infos = {}
+    for image_file,summary in summaries.items():
+        if url := images_url.get(image_file):
+            image_infos[image_file] = {
+                "url":url,
+                "summary":summary
+            }
+    logger.info(f"图片处理的汇总结果:{image_infos}")
+    # 在md_content中进行匹配，替换为图片描述和图片地址
+    if image_infos:
+        for image_file,(summary,url) in image_infos.items():
+            rep = re.compile(r"!\[.*?]\(.*?"+image_file+r".*?\)")
+            md_content = rep.sub(f"![{summary}]({url})",md_content)
+        logger.info(f"已经完成md内容的替换，新的内容为:{md_content}")
+    return md_content
+
+
+def step_5_backup_md(new_md_content, md_path_obj):
+    """完成新的md的磁盘备份，并返回老地址"""
+    # 将地址分割例如：c:/xxx/xxx.md -> c:/xxx/xxx_new.md
+    new_md_path_str = os.path.splitext(md_path_obj)[0]+"_new.md"
+    with open(new_md_path_str,"w",encoding="utf-8") as f:
+        f.write(new_md_content)
+    return new_md_path_str
 
 
 def node_md_img(state: ImportGraphState) -> ImportGraphState:
@@ -165,12 +262,51 @@ def node_md_img(state: ImportGraphState) -> ImportGraphState:
     #  3.进行图片内容的处总结和处理
     #     参数：[（图片名，图片地址，（上文，下文））]，md的文件名称
     #     返回值：[（图片名，图片描述）]
+    summaries = step_3_generate_img_summaries(targets,md_path_obj.stem)
+
     #  4.上传图片到minIO，更新md的内容
     #     参数：minio_client,{图片名：图片描述}，[（图片名，图片地址，（上文，下文））]，md_content,md文件名称
     #     返回值：更新后的md_content
+    new_md_content = step_4_upload_images_and_replace_md(summaries,targets,md_content,md_path_obj.stem)
+
     #  5.进行数据的处理和备份
     #     参数：new_md_content,md_path,
     #     返回值：new_md_path
+    new_md_file_path = step_5_backup_md(new_md_content,md_path_obj)
+
+    # 更新state中的md_path
+    state["md_path"] = new_md_file_path
+
+    # 更新state中的md_content
+    state["md_content"] = new_md_content
+
     add_done_task(state["task_id"], func_name)
     logger.info(f"【{func_name}】节点执行完成")
     return state
+
+
+
+if __name__ == "__main__":
+    """本地测试入口：单独运行该文件时，执行MD图片处理全流程测试"""
+    from app.utils.path_util import PROJECT_ROOT
+    logger.info(f"本地测试 - 项目根目录：{PROJECT_ROOT}")
+
+    # 测试MD文件路径（需手动将测试文件放入对应目录）
+    test_md_name = os.path.join(r"output\hak180产品安全手册", "hak180产品安全手册.md")
+    test_md_path = os.path.join(PROJECT_ROOT, test_md_name)
+
+    # 校验测试文件是否存在
+    if not os.path.exists(test_md_path):
+        logger.error(f"本地测试 - 测试文件不存在：{test_md_path}")
+        logger.info("请检查文件路径，或手动将测试MD文件放入项目根目录的output目录下")
+    else:
+        # 构造测试状态对象，模拟流程入参
+        test_state = {
+            "md_path": test_md_path,
+            "task_id": "test_task_123456",
+            "md_content": ""
+        }
+        logger.info("开始本地测试 - MD图片处理全流程")
+        # 执行核心处理流程
+        result_state = node_md_img(test_state)
+        logger.info(f"本地测试完成 - 处理结果状态：{result_state}")

@@ -248,9 +248,10 @@ def step_3_download_and_extract(zip_url,local_dir_obj,stem):
     if not target_md_file:
         for md_file in md_file_list:
             if md_file.name.lower() == "full.md":
-                target_md_file = md_file
+                rename_full = md_file.rename(md_file.with_name(f"{stem}.md"))
+                target_md_file = rename_full
                 break
-    logger.info(f"找到默认full.md的markdown文件：{target_md_file}")
+    logger.info(f"找到默认full.md的markdown文件,并重命名为{stem}.md")
 
 
     #如果都没有找到，使用第一个markdown文件

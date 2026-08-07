@@ -94,7 +94,7 @@ def step_2_split_by_title(md_content, file_title):
              }
         )
     logger.info(f"已经完成chunks的语义粗切，识别chunk数量：{title_count}")
-
+    logger.info(f"粗切切割后的结果为：{sections}")
     return sections,title_count,len(lines)
 
 def split_long_section(section, max_length):
@@ -116,10 +116,11 @@ def split_long_section(section, max_length):
     spliter = RecursiveCharacterTextSplitter(
         chunk_size=max_length,
         chunk_overlap=100,
-        separators=['\n\n','\n','。','!','，','']
+        separators=['\n\n','\n','。','！','；',' ']
     )
-    for index,trunk in enumerate(spliter.split_text(content),start=1):
-        text = trunk.strip()#切片的内容
+    #循环处理切分后的段落
+    for index,chunk in enumerate(spliter.split_text(content),start=1):
+        text = chunk.strip()#切片的内容
         title = f"{section.get('title')}_{index}"
         file_title = section.get("file_title")
         part = index
@@ -134,6 +135,7 @@ def split_long_section(section, max_length):
              }
         )
     # 返回切割后的内容
+    logger.info(f"split_long_section节点二次切分后的结果为：{sub_sections}")
     return sub_sections
 
 
@@ -155,14 +157,14 @@ def merge_short_section(final_sections, min_length):
             pre_section = section
             continue
         is_current_short = len(pre_section.get("content")) < min_length#判断上一次是不是短块需要合并
-        is_same_parent_title = pre_section.get("parent_title") == section.get("parent_title")#判断是否是同一个parent_title
+        is_same_parent_title = pre_section.get("parent_title") and pre_section.get("parent_title") == section.get("parent_title")#判断是否是同一个parent_title
 
 
         if is_current_short and is_same_parent_title:
             # 上一次是短块，且是同一个parent_title，需要合并到上一个段落
-            current_content = section.get("content")
-            pre_section["content"] +="\n\n" + current_content#合并内容
+            pre_section["content"] +="\n\n" + section.get("content")#合并内容
             pre_section["part"]  = section.get("part")#更新这个段落的part为当前段落的part
+            logger.info(f"合并后的段落为：{pre_section}")
 
         else:
             # 上一次不是短块，或者不是同一个parent_title，需要合并到上一个段落
@@ -172,7 +174,7 @@ def merge_short_section(final_sections, min_length):
     if pre_section is not None:
         merge_sections.append(pre_section)
 
-
+    logger.info(f"merge_short_section节点合并后的结果为：{merge_sections}")
     return merge_sections
 
 def step_3_split_by_content(sections,max_length,min_length):
@@ -190,12 +192,13 @@ def step_3_split_by_content(sections,max_length,min_length):
         sub_section = split_long_section(section,max_length)
         final_sections.extend(sub_section)#平铺切割后的的内容到最终的切分后的部分 如果使用append会成为 [[],[],[]]
     #小于的再合并
+    logger.info(f"合并前的切分结果为：{final_sections}")
     final_sections = merge_short_section(final_sections,min_length)
     #补全属性和参数
     for section in final_sections:
         section["part"] = section.get('part') or 1
         section["parent_title"] = section.get('parent_title') or section.get('title')
-
+    logger.info(f"step_3_split_by_content节点合并后的结果为：{final_sections}")
     return final_sections
 
 
@@ -243,6 +246,7 @@ def node_document_split(state: ImportGraphState) -> ImportGraphState:
         #2.粗粒度切割，语义完善-》使用标题切割[{content:标题内容,title:标题,file_title:文件名}]
         # 返回值：切分后的部分，标题数量，切分的数量
         sections,title_count,lines_count = step_2_split_by_title(md_content,file_title)
+        logger.info(f"step_2_split_by_title节点切分后的结果为：{sections}")
         # 3.特殊场景：无标题，给每个段落添加一个默认标题
         if title_count==0:
             sections = [{"title": "default_title", "content": md_content, "file_title": file_title}]
@@ -253,7 +257,7 @@ def node_document_split(state: ImportGraphState) -> ImportGraphState:
         step_4_backup_chunks(state,sections)
     except Exception as e:
 
-        logger.error(f"【{func_name}】节点执行异常: {e}")
+        logger.exception(f"【{func_name}】节点执行异常: {e}")
 
 
     add_done_task(state["task_id"], func_name)

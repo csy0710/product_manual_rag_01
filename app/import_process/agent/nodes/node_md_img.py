@@ -91,17 +91,17 @@ def step_1_get_content(state: ImportGraphState) -> Tuple[str, Path, Path]:
     # 读取文件内容
     if not state["md_content"]:
         #没有再读取，有证明是pdf节点解析过来的。
-        with open(md_file_path, "r", encoding="utf-8") as f:
-            md_content = f.read()
-            logger.info(f"【step_1_get_content】节点执行完成，读取文件内容，文件路径：{md_file_path}")
-        state["md_content"] = md_content
+        with md_path_obj.open("r",encoding="utf-8") as f:
+            state["md_content"] = f.read()
+            logger.info(f"【step_1_get_content】节点执行完成，读取文件内容，文件路径：{md_path_obj}")
+
 
 
     # 图片路径是否为空
     # 自己传入的md文件中的图片文件夹也要叫images，这里没有特殊处理
     images_dir_obj =md_path_obj.parent / "images"
 
-    return md_content,md_path_obj,images_dir_obj
+    return state["md_content"],md_path_obj,images_dir_obj
 
 
 def find_image_in_md_content(md_content, image_file,context_length:int=100):

@@ -94,7 +94,6 @@ def step_2_split_by_title(md_content, file_title):
              }
         )
     logger.info(f"已经完成chunks的语义粗切，识别chunk数量：{title_count}")
-    logger.info(f"粗切切割后的结果为：{sections}")
     return sections,title_count,len(lines)
 
 def split_long_section(section, max_length):
@@ -198,7 +197,6 @@ def step_3_split_by_content(sections,max_length,min_length):
     for section in final_sections:
         section["part"] = section.get('part') or 1
         section["parent_title"] = section.get('parent_title') or section.get('title')
-    logger.info(f"step_3_split_by_content节点合并后的结果为：{final_sections}")
     return final_sections
 
 

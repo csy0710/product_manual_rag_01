@@ -12,5 +12,6 @@ def node_search_embedding(state):
     1. 调用嵌入向量数据库 (如 ChromaDB) 进行搜索。
     2. 将搜索结果保存到 state["reranked_docs"]。
     """
+
     print(f">>> [Stub] 执行节点: {sys._getframe().f_code.co_name}")
     return {"embedding_chunks": []}

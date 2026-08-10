@@ -2,7 +2,7 @@ from pathlib import Path
 from app.utils.path_util import PROJECT_ROOT
 from app.core.logger import logger  # 可选，加日志更友好
 
-def load_prompt(name: str, **kwargs) -> str:
+def load_prompt(name: str, **kwargs: object) -> str:
     """
     加载提示词并渲染变量占位符
     :param name: 提示词文件名（不带.prompt后缀，如image_summary）

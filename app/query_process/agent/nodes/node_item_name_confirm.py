@@ -76,7 +76,7 @@ def step_4_query_milvus_item_names(item_names):
             client=milvus_client,
             collection_name=milvus_config.item_name_collection,
             reqs = reqs,#请求体
-            ranker_weights=(0.5,0.5),
+            ranker_weights=(0.8,0.2),
             norm_score = True,#归一化打分
         )
     #4.提取查询结果，封装返回的数据格式

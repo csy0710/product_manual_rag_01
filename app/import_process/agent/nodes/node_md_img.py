@@ -218,10 +218,7 @@ def step_4_upload_images_and_replace_md(summaries, targets, md_content, stem):
     image_infos = {}
     for image_file,summary in summaries.items():
         if url := images_url.get(image_file):
-            image_infos[image_file] = {
-                "url":url,
-                "summary":summary
-            }
+            image_infos[image_file] = (summary,url)
     logger.info(f"图片处理的汇总结果:{image_infos}")
     # 在md_content中进行匹配，替换为图片描述和图片地址
     if image_infos:
@@ -292,7 +289,7 @@ if __name__ == "__main__":
     logger.info(f"本地测试 - 项目根目录：{PROJECT_ROOT}")
 
     # 测试MD文件路径（需手动将测试文件放入对应目录）
-    test_md_name = os.path.join(r"output\hak180产品安全手册", "hak180产品安全手册.md")
+    test_md_name = os.path.join(r"output\20260808\58681287-0e20-41e9-8c08-d80831d84967\hak180产品安全手册", "hak180产品安全手册.md")
     test_md_path = os.path.join(PROJECT_ROOT, test_md_name)
 
     # 校验测试文件是否存在

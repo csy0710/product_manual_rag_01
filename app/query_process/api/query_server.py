@@ -69,7 +69,7 @@ def run_query_graph(session_id: str, query: str, is_stream: bool):
     update_task_status(session_id, "processing",is_stream)
     state =create_default_state(
         session_id = session_id,
-        query = query,
+        original_query = query,
         is_stream = is_stream,
     )
     try:
@@ -77,6 +77,7 @@ def run_query_graph(session_id: str, query: str, is_stream: bool):
         update_task_status(session_id, "completed", is_stream)
     except Exception as e:
         logger.error(f"查询图执行异常，会话ID为{session_id}，异常信息为{e}")
+        logger.exception(f"异常信息为{e}")
         update_task_status(session_id, "failed", is_stream)
         push_to_session(session_id,SSEEvent.ERROR,{"error":str(e)})
 
@@ -168,6 +169,8 @@ async def clear_history(session_id: str):
 
 if __name__ == "__main__":
     uvicorn.run(app, host="127.0.0.1", port=8001)
+
+
 
 
 

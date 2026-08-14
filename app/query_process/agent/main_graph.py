@@ -26,7 +26,7 @@ builder.set_entry_point("node_item_name_confirm")
 #当执行完节点node_item_name_confirm时，会出现两种情况 一种是没有明确item_names的情况 这样state中的answer就会有值 直接跳转到node_answer_output
 #另一种是明确item_names的情况 这样state中的answer就会为空 直接跳转到，为正常执行程序，走node_search_embedding_hyde，node_search_embedding，node_web_search_mcp
 def route_after_node_item_name_confirm(state:QueryGraphState):
-    if state["answer"]:
+    if state.get("answer"):
         return "node_answer_output"
     else:
         return "node_search_embedding_hyde", "node_search_embedding", "node_web_search_mcp"

@@ -230,6 +230,7 @@ def step_3_download_and_extract(zip_url,local_dir_obj,stem):
         zip_file_obj.extractall(extract_target_dir)
     #5.返回解压后的markdown文件地址
     md_file_list = list(extract_target_dir.rglob('*.md'))
+
     logger.info(f"解压后的markdown文件列表：{md_file_list}")
 
     # 判断list是否为空

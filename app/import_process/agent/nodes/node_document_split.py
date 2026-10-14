@@ -110,16 +110,23 @@ def split_long_section(section, max_length):
     if len(content) <= max_length:
         logger.info(f"段落{content}长度小于等于最大长度{max_length}，无需切分")
         return [section]
+    #把content拆分，把标题拆出来
+    if "\n" in content:
+        head,body = content.split("\n",1)
+    else:
+        head,body = "",content
     #超过最大长度，需要二次切分
     sub_sections = []
     spliter = RecursiveCharacterTextSplitter(
-        chunk_size=max_length,
+        chunk_size=max_length-len(head)-1,
         chunk_overlap=100,
         separators=['\n\n','\n','。','！','；',' ']
     )
     #循环处理切分后的段落
-    for index,chunk in enumerate(spliter.split_text(content),start=1):
+    for index,chunk in enumerate(spliter.split_text(body),start=1):
         text = chunk.strip()#切片的内容
+        if index ==1:
+            text = head+"\n"+text
         title = f"{section.get('title')}_{index}"
         file_title = section.get("file_title")
         part = index

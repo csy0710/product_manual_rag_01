@@ -1,20 +1,44 @@
-# 屏蔽大文件文件夹
-doc/
-output/
-logs/
-
-# IDE PyCharm配置
-.idea/
-
-# 环境密钥文件
+# ===================== 环境与密钥 =====================
 .env
+.env.local
+*.key
+*.pem
 
-# Python缓存
+# ===================== 数据与大文件（不入库） =====================
+# 测试用 PDF 语料
+doc/
+# 导入流程的中间产物（md / 图片 / chunks.json）
+output/
+temp-files/
+# 日志
+logs/
+*.log
+# 本地下载的大模型 / 数据集 / 向量库文件
+models/
+dataset/
+model_cache/
+
+# ===================== IDE =====================
+.idea/
+.vscode/
+*.iml
+
+# ===================== Python =====================
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
 
-# 向量库、模型、数据集后续新增也可以继续在这里添加
-# models/
-# dataset/
+# ===================== 本地个人文件（不入库） =====================
+# 全量代码快照（喂给大模型的临时产物）
+prompt.txt
+# Claude Code 本地配置与自定义 skill
+.claude/
+# 面试复习进度记录
+.interview-progress/
+# 编码练习沙箱
+.code-drill/

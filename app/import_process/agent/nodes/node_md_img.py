@@ -239,7 +239,11 @@ def step_5_backup_md(new_md_content, md_path_obj):
 
 
 def node_md_img(state: ImportGraphState) -> ImportGraphState:
+    """
 
+    :param state:
+    :return:
+    """
     logger.info(f">>> [Stub] 执行节点: {sys._getframe().f_code.co_name}")
     func_name = sys._getframe().f_code.co_name
     add_running_task(state["task_id"], func_name)
